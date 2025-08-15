@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  role          String   @default("READ_ONLY")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  resetToken    String?  @unique
+  resetTokenExp DateTime?
+}
+
+model LicenseType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  licenses  License[]
+}
+
+model License {
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  customerName       String
+  customerEmail      String
+  customerNumber     String?
+  domain             String
+  typeId             String
+  type               LicenseType @relation(fields: [typeId], references: [id])
+  status             String   @default("ACTIVE")
+  notes              String?
+  priceCents         Int      @default(0)
+  priceInterval      String   @default("ONE_TIME")
+  expiresAt          DateTime?
+  lastApiAccessAt    DateTime?
+  apiAccessCountHour Int      @default(0)
+  apiAccessHourKey   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model TermsOfService {
+  id           String   @id @default(cuid())
+  version      Int
+  slug         String
+  title        String
+  contentHtml  String
+  isPublished  Boolean  @default(true)
+  publishedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([slug, version])
+}
+
+model Setting {
+  key   String @id
+  value String
+}

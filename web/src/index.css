@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #2563eb;
+  --primary-500: #3b82f6;
+  --primary-600: #1d4ed8;
+  color-scheme: light dark;
+}
+
+@layer base {
+  html { scroll-behavior: smooth; height: 100%; }
+  body { 
+    @apply antialiased font-sans text-zinc-900 dark:text-zinc-100 h-full;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  }
+  .dark body {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  }
+  #root { height: 100%; }
+  :root { 
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; 
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm border border-zinc-200/50 dark:border-zinc-800/50 rounded-2xl shadow-xl shadow-zinc-900/5 dark:shadow-zinc-950/20;
+  }
+  
+  .gradient-card {
+    background: linear-gradient(135deg, white 0%, #f8fafc 100%);
+    @apply border border-zinc-200/50 rounded-2xl shadow-lg shadow-zinc-900/5;
+  }
+  .dark .gradient-card {
+    background: linear-gradient(135deg, #18181b 0%, #27272a 100%);
+    @apply border-zinc-800/50 shadow-zinc-950/20;
+  }
+
+  .stat-card {
+    @apply relative overflow-hidden;
+    background: linear-gradient(135deg, white 0%, #fafafa 100%);
+    @apply border border-zinc-200/50 rounded-xl shadow-sm;
+  }
+  .dark .stat-card {
+    background: linear-gradient(135deg, #18181b 0%, #262626 100%);
+    @apply border-zinc-800/50;
+  }
+  
+  .nav-link {
+    @apply px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+    @apply text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100;
+    @apply hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60;
+  }
+  .nav-link.active {
+    @apply bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  .btn-primary {
+    @apply text-white shadow-lg shadow-blue-500/25;
+    background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  }
+  .btn-primary:hover {
+    @apply shadow-xl shadow-blue-500/30 -translate-y-0.5;
+  }
+  .btn-secondary {
+    @apply border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 shadow-sm;
+  }
+  .btn-secondary:hover {
+    @apply bg-zinc-50 dark:bg-zinc-800 shadow-md -translate-y-0.5;
+  }
+  .btn-ghost {
+    @apply text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60;
+  }
+
+  .form-input {
+    @apply w-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-3 text-sm;
+    @apply focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all duration-200;
+    @apply placeholder:text-zinc-400 dark:placeholder:text-zinc-500;
+  }
+  
+  .table-modern {
+    @apply w-full border-separate border-spacing-0;
+  }
+  .table-modern th {
+    @apply bg-zinc-50 dark:bg-zinc-900/50 text-zinc-900 dark:text-zinc-100 font-semibold text-sm py-4 px-6 text-left border-b border-zinc-200 dark:border-zinc-800;
+  }
+  .table-modern th:first-child { @apply rounded-tl-xl; }
+  .table-modern th:last-child { @apply rounded-tr-xl; }
+  .table-modern td {
+    @apply py-4 px-6 text-sm border-b border-zinc-100 dark:border-zinc-800/50;
+    @apply bg-white dark:bg-zinc-900/30;
+  }
+  .table-modern tbody tr:last-child td:first-child { @apply rounded-bl-xl; }
+  .table-modern tbody tr:last-child td:last-child { @apply rounded-br-xl; }
+  .table-modern tbody tr:last-child td { @apply border-b-0; }
+  .table-modern tbody tr:hover td {
+    @apply bg-blue-50/50 dark:bg-blue-950/20;
+  }
+
+  .wysiwyg-editor {
+    direction: ltr !important;
+    text-align: left !important;
+    unicode-bidi: embed !important;
+    writing-mode: horizontal-tb !important;
+  }
+
+  /* TipTap Editor Styling */
+  .ProseMirror {
+    direction: ltr !important;
+    text-align: left !important;
+    unicode-bidi: embed !important;
+    writing-mode: horizontal-tb !important;
+    outline: none !important;
+    min-height: 200px;
+  }
+
+  .ProseMirror p {
+    margin: 0.5em 0;
+  }
+
+  .ProseMirror h2 {
+    margin: 1em 0 0.5em 0;
+    font-size: 1.5em;
+    font-weight: bold;
+  }
+
+  .ProseMirror h3 {
+    margin: 1em 0 0.5em 0;
+    font-size: 1.25em;
+    font-weight: bold;
+  }
+
+  .ProseMirror ul,
+  .ProseMirror ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+
+  .ProseMirror li {
+    margin: 0.25em 0;
+  }
+
+  .page-header {
+    @apply mb-8;
+  }
+  .page-title {
+    @apply text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2;
+  }
+  .page-subtitle {
+    @apply text-zinc-600 dark:text-zinc-400;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar { @apply w-2; }
+::-webkit-scrollbar-track { @apply bg-zinc-100 dark:bg-zinc-800; }
+::-webkit-scrollbar-thumb { @apply bg-zinc-300 dark:bg-zinc-600 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-zinc-400 dark:bg-zinc-500; }
