@@ -291,7 +291,7 @@ export default function Licenses() {
                   <td className="text-right">
                     <div className="flex justify-end gap-2">
                       <button
-                        className="inline-flex items-center justify-center h-9 w-9 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                        className="inline-flex items-center justify-center h-9 w-9 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40"
                         aria-label="Bewerken"
                         title="Bewerken"
                         onClick={() => setEdit(l)}
@@ -299,7 +299,7 @@ export default function Licenses() {
                         <PencilIcon className="h-4 w-4" />
                       </button>
                       <button
-                        className="inline-flex items-center justify-center h-9 w-9 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                        className="inline-flex items-center justify-center h-9 w-9 rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/40"
                         aria-label="Licentie e-mail opnieuw sturen"
                         title="Licentie e-mail opnieuw sturen"
                         onClick={() => setConfirm({
@@ -315,7 +315,11 @@ export default function Licenses() {
                         <EnvelopeIcon className="h-4 w-4" />
                       </button>
                       <button
-                        className="inline-flex items-center justify-center h-9 w-9 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                        className={`inline-flex items-center justify-center h-9 w-9 rounded-full ${
+                          l.status === 'ACTIVE'
+                            ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/40'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/40'
+                        } ${rowSavingId === l.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                         aria-label={l.status === 'ACTIVE' ? 'Deactiveren' : 'Activeren'}
                         title={l.status === 'ACTIVE' ? 'Deactiveren' : 'Activeren'}
                         disabled={rowSavingId === l.id}
@@ -325,7 +329,7 @@ export default function Licenses() {
                       </button>
                       {l.status === 'INACTIVE' && (
                         <button
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                          className="inline-flex items-center justify-center h-9 w-9 rounded-full bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/40"
                           aria-label="Verwijderen"
                           title="Verwijderen"
                           onClick={() => setDeleteModal({ isOpen: true, license: l })}
