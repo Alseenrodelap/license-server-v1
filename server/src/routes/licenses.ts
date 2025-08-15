@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { generateLicenseCode } from '../utils/license';
 import { getSetting, sendMail } from '../services/emailService';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -28,12 +29,12 @@ router.get('/', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN', 'READ_ONLY
 			q
 				? {
 					OR: [
-						{ code: { contains: q, mode: 'insensitive' } },
-						{ customerName: { contains: q, mode: 'insensitive' } },
-						{ customerEmail: { contains: q, mode: 'insensitive' } },
-						{ customerNumber: { contains: q, mode: 'insensitive' } },
-						{ domain: { contains: q, mode: 'insensitive' } },
-						{ notes: { contains: q, mode: 'insensitive' } },
+						{ code: { contains: q } },
+						{ customerName: { contains: q } },
+						{ customerEmail: { contains: q } },
+						{ customerNumber: { contains: q } },
+						{ domain: { contains: q } },
+						{ notes: { contains: q } },
 					],
 				}
 			: {},
@@ -56,6 +57,7 @@ router.post('/', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (
 		customerNumber,
 		domain,
 		typeId,
+		licenseTypeId,
 		status = 'ACTIVE',
 		notes,
 		priceCents = 0,
@@ -71,7 +73,7 @@ router.post('/', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (
 			customerEmail,
 			customerNumber,
 			domain,
-			typeId,
+			typeId: licenseTypeId || typeId,
 			status,
 			notes,
 			priceCents,
@@ -93,7 +95,7 @@ router.post('/', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (
 <b>Vervaldatum:</b> {{expires_at}}</p>
 <p>Voorwaarden: <a href="{{terms_url}}">{{terms_url}}</a></p>
 <p>Groet,<br/>${appName}</p>`;
-		const termsUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/terms/latest`;
+		const termsUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/#/terms/latest`;
 		const html = template
 			.replaceAll('{{customer_name}}', license.customerName)
 			.replaceAll('{{license_code}}', license.code)
@@ -102,24 +104,87 @@ router.post('/', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (
 			.replaceAll('{{status}}', license.status)
 			.replaceAll('{{expires_at}}', license.expiresAt ? new Date(license.expiresAt).toISOString().slice(0, 10) : '—')
 			.replaceAll('{{terms_url}}', termsUrl);
-		await sendMail({ to: license.customerEmail, subject: `${appName} licentie`, html });
+		try {
+			await sendMail({ to: license.customerEmail, subject: `${appName} licentie`, html });
+		} catch (e: any) {
+			logger.warn(`Sending license email failed: ${e?.message || e}`);
+		}
 	}
 
 	res.json({ license });
 });
 
-router.put('/:id', requireAuth, requireRole(['SUPER_ADMIN']), async (req, res) => {
-	const { id } = req.params;
-	const data = req.body ?? {};
-	if (data.expiresAt) data.expiresAt = new Date(data.expiresAt);
-	const license = await prisma.license.update({ where: { id }, data });
-	res.json({ license });
+router.put('/:id', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (req, res) => {
+	try {
+		const { id } = req.params;
+		const body = req.body ?? {};
+		// Map en filter alleen toegestane velden
+		const allowed: any = {};
+		if (typeof body.code === 'string' && body.code.trim()) allowed.code = body.code.trim();
+		if (typeof body.customerName === 'string') allowed.customerName = body.customerName;
+		if (typeof body.customerEmail === 'string') allowed.customerEmail = body.customerEmail;
+		if (typeof body.customerNumber === 'string') allowed.customerNumber = body.customerNumber;
+		if (typeof body.domain === 'string') allowed.domain = body.domain;
+		if (typeof body.status === 'string') allowed.status = body.status;
+		if (typeof body.notes === 'string' || body.notes === null) allowed.notes = body.notes;
+		if (typeof body.priceCents === 'number') allowed.priceCents = body.priceCents;
+		if (typeof body.priceInterval === 'string') allowed.priceInterval = body.priceInterval;
+		if (body.expiresAt === null) allowed.expiresAt = null;
+		if (typeof body.expiresAt === 'string') allowed.expiresAt = new Date(body.expiresAt);
+		const mappedTypeId = body.licenseTypeId || body.typeId;
+		if (typeof mappedTypeId === 'string') allowed.typeId = mappedTypeId;
+
+		const license = await prisma.license.update({ where: { id }, data: allowed });
+		res.json({ license });
+	} catch (e: any) {
+		if (e?.code === 'P2002' && e?.meta?.target?.includes('License_code_key')) {
+			return res.status(409).json({ error: 'Licentiecode bestaat al' });
+		}
+		logger.error(`Update license failed: ${e?.message || e}`);
+		return res.status(500).json({ error: 'Failed to update license' });
+	}
 });
 
 router.delete('/:id', requireAuth, requireRole(['SUPER_ADMIN']), async (req, res) => {
 	const { id } = req.params;
 	await prisma.license.delete({ where: { id } });
 	res.json({ ok: true });
+});
+
+// Resend license email
+router.post('/:id/resend-email', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const license = await prisma.license.findUnique({ where: { id }, include: { type: true } });
+        if (!license) return res.status(404).json({ error: 'Not found' });
+
+        const appName = (await getSetting('APP_NAME')) || 'License Server';
+        const template = (await getSetting('EMAIL_TEMPLATE_LICENSE')) ||
+            `<p>Beste {{customer_name}},</p>
+<p>Hierbij uw licentie:</p>
+<p><b>Code:</b> {{license_code}}<br/>
+<b>Type:</b> {{license_type}}<br/>
+<b>Domein:</b> {{domain}}<br/>
+<b>Status:</b> {{status}}<br/>
+<b>Vervaldatum:</b> {{expires_at}}</p>
+<p>Voorwaarden: <a href="{{terms_url}}">{{terms_url}}</a></p>
+<p>Groet,<br/>${appName}</p>`;
+        const termsUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/#/terms/latest`;
+        const html = template
+            .replaceAll('{{customer_name}}', license.customerName)
+            .replaceAll('{{license_code}}', license.code)
+            .replaceAll('{{license_type}}', license.type.name)
+            .replaceAll('{{domain}}', license.domain)
+            .replaceAll('{{status}}', license.status)
+            .replaceAll('{{expires_at}}', license.expiresAt ? new Date(license.expiresAt).toISOString().slice(0, 10) : '—')
+            .replaceAll('{{terms_url}}', termsUrl);
+
+        await sendMail({ to: license.customerEmail, subject: `${appName} licentie`, html });
+        return res.json({ ok: true });
+    } catch (e: any) {
+        logger.error(`Resend license email failed: ${e?.message || e}`);
+        return res.status(500).json({ error: 'Failed to send email' });
+    }
 });
 
 // Public API: verify license (rate limited per license: 5 per hour)
@@ -161,7 +226,7 @@ router.get('/verify/:code', async (req, res) => {
 		status: license.status,
 		expiresAt: license.expiresAt,
 		lastApiAccessAt: license.lastApiAccessAt,
-		termsUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/terms/latest`,
+		termsUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/#/terms/latest`,
 	});
 });
 

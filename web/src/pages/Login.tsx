@@ -3,7 +3,7 @@ import { Card, CardBody, Input, Button, FormField } from '../components/ui';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-export default function Login({ onLogin }: { onLogin: (token: string) => void }){
+export default function Login({ appName, onLogin }: { appName: string; onLogin: (token: string) => void }){
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [sent, setSent] = useState(false);
@@ -30,7 +30,7 @@ export default function Login({ onLogin }: { onLogin: (token: string) => void })
       <Card className="w-full max-w-md">
         <CardBody className="space-y-6">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Welkom terug</h1>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{appName}</h1>
             <p className="text-zinc-600 dark:text-zinc-400 mt-2">Log in op uw account</p>
           </div>
           

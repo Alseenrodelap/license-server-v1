@@ -292,32 +292,26 @@ export default function Terms(){
                       {new Date(item.updatedAt).toLocaleString()}
                     </td>
                     <td className="text-right">
-                                              <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={ClipboardIcon}
-                            onClick={() => handleCopyLink(item)}
-                          >
-                            Kopiëren
-                          </Button>
-                                                      <Button
-                              variant="ghost"
-                              size="sm"
-                              icon={ArrowTopRightOnSquareIcon}
-                              onClick={() => window.open(`/#/terms/${item.slug}/${item.version}`, '_blank')}
-                            >
-                              Openen
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              icon={EyeIcon}
-                              onClick={() => window.open(`/#/terms/${item.slug}/${item.version}`, '_blank')}
-                            >
-                              Bekijken
-                            </Button>
-                        </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={ClipboardIcon}
+                          onClick={() => handleCopyLink(item)}
+                          title="Kopieer link naar klembord"
+                        >
+                          Link
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={EyeIcon}
+                          onClick={() => window.open(`/#/terms/${item.slug}/${item.version}`, '_blank')}
+                          title="Bekijk deze versie in nieuw tabblad"
+                        >
+                          Bekijken
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

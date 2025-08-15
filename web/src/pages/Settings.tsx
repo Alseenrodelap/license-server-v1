@@ -1,28 +1,113 @@
 import { useEffect, useRef, useState } from 'react';
 import { setPrimaryColor } from '../theme';
-import { PageHeader, Card, CardBody, Input, Select, Button, FormField, Textarea, Toast } from '../components/ui';
+import { PageHeader, Card, CardBody, Input, Select, Button, FormField, Textarea, Toast, ErrorLogModal } from '../components/ui';
 import { CogIcon, EnvelopeIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-export default function Settings(){
+export default function Settings({ onSettingsChange }: { onSettingsChange?: (appName: string) => void }){
   const [settings, setSettings] = useState<any>({});
   const [testTo, setTestTo] = useState('');
   const [template, setTemplate] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; error: any }>({ isOpen: false, error: null });
   const templateRef = useRef<HTMLTextAreaElement>(null);
 
   const tokenHeader = { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' };
 
   const load = async ()=>{
-    const res = await fetch(`${API}/settings`, { headers: { Authorization: tokenHeader.Authorization } });
-    const s = await res.json();
-    setSettings(s);
-    setTestTo(s.SMTP_TEST_TO || '');
-    setTemplate(s.EMAIL_TEMPLATE_LICENSE || '');
-    if (s.PRIMARY_COLOR) setPrimaryColor(s.PRIMARY_COLOR);
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/settings`, { headers: { Authorization: tokenHeader.Authorization } });
+      if (res.ok) {
+        const s = await res.json();
+        setSettings(s);
+        setTestTo(s.SMTP_TEST_TO || '');
+        setTemplate(s.EMAIL_TEMPLATE_LICENSE || '');
+        if (s.PRIMARY_COLOR) setPrimaryColor(s.PRIMARY_COLOR);
+        if (s.APP_NAME && onSettingsChange) {
+          onSettingsChange(s.APP_NAME);
+          document.title = s.APP_NAME;
+        }
+      } else {
+        setToast({ message: 'Er ging iets mis bij het laden van de instellingen', type: 'error' });
+      }
+    } catch (error) {
+      setToast({ message: 'Er ging iets mis bij het laden van de instellingen', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
   };
+  
   useEffect(()=>{ load(); },[]);
+
+  const saveSettings = async (newSettings: any, section: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API}/settings`, { 
+        method: 'POST', 
+        headers: tokenHeader, 
+        body: JSON.stringify(newSettings) 
+      }); 
+      if (response.ok) {
+        await load(); // Reload all settings to ensure consistency
+        setToast({ message: `${section} opgeslagen!`, type: 'success' });
+        if (newSettings.APP_NAME && onSettingsChange) {
+          onSettingsChange(newSettings.APP_NAME);
+          document.title = newSettings.APP_NAME;
+        }
+      } else {
+        setToast({ message: 'Er ging iets mis bij het opslaan', type: 'error' });
+      }
+    } catch (error) {
+      setToast({ message: 'Er ging iets mis bij het opslaan', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!testTo) {
+      setToast({ message: 'Vul een e-mailadres in voor de test', type: 'error' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API}/settings/test-email`, { 
+        method: 'POST', 
+        headers: tokenHeader, 
+        body: JSON.stringify({ to: testTo }) 
+      }); 
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setToast({ message: data.message || 'Test e-mail succesvol verstuurd!', type: 'success' });
+      } else {
+        // Show error details in modal
+        setErrorModal({ 
+          isOpen: true, 
+          error: {
+            message: data.error || 'SMTP Test mislukt',
+            details: data.details || {}
+          }
+        });
+      }
+    } catch (error) {
+      console.error('SMTP Test Error:', error);
+      setErrorModal({ 
+        isOpen: true, 
+        error: {
+          message: 'Er ging iets mis bij het versturen van de test e-mail',
+          details: { error: error instanceof Error ? error.message : 'Onbekende fout' }
+        }
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const placeholders = ['{{customer_name}}','{{license_code}}','{{license_type}}','{{domain}}','{{status}}','{{expires_at}}','{{terms_url}}'];
 
@@ -79,28 +164,13 @@ export default function Settings(){
           <div className="flex justify-end">
             <Button 
               variant="primary" 
-              onClick={async () => { 
-                try {
-                  const response = await fetch(`${API}/settings`, { 
-                    method: 'POST', 
-                    headers: tokenHeader, 
-                    body: JSON.stringify({ 
-                      APP_NAME: settings.APP_NAME, 
-                      PRIMARY_COLOR: settings.PRIMARY_COLOR 
-                    }) 
-                  }); 
-                  if (response.ok) {
-                    load(); 
-                    setToast({ message: 'Algemene instellingen opgeslagen!', type: 'success' });
-                  } else {
-                    setToast({ message: 'Er ging iets mis bij het opslaan', type: 'error' });
-                  }
-                } catch (error) {
-                  setToast({ message: 'Er ging iets mis bij het opslaan', type: 'error' });
-                }
-              }}
+              onClick={() => saveSettings({ 
+                APP_NAME: settings.APP_NAME, 
+                PRIMARY_COLOR: settings.PRIMARY_COLOR 
+              }, 'Algemene instellingen')}
+              disabled={loading}
             >
-              Opslaan
+              {loading ? 'Opslaan...' : 'Opslaan'}
             </Button>
           </div>
         </CardBody>
@@ -181,48 +251,28 @@ export default function Settings(){
             </FormField>
             <Button 
               variant="secondary" 
-              onClick={async () => { 
-                try {
-                  const response = await fetch(`${API}/settings/test-email`, { 
-                    method: 'POST', 
-                    headers: tokenHeader, 
-                    body: JSON.stringify({ to: testTo }) 
-                  }); 
-                  if (response.ok) {
-                    setToast({ message: 'Test e-mail succesvol verstuurd!', type: 'success' });
-                  } else {
-                    setToast({ message: 'Er ging iets mis bij het versturen van de test e-mail', type: 'error' });
-                  }
-                } catch (error) {
-                  setToast({ message: 'Er ging iets mis bij het versturen van de test e-mail', type: 'error' });
-                } 
-              }}
+              onClick={handleTestEmail}
+              disabled={loading}
             >
-              Test versturen
+              {loading ? 'Testen...' : 'Test versturen'}
             </Button>
           </div>
           
           <div className="flex justify-end">
             <Button 
               variant="primary" 
-              onClick={async () => { 
-                try {
-                  const response = await fetch(`${API}/settings`, { 
-                    method: 'POST', 
-                    headers: tokenHeader, 
-                    body: JSON.stringify(settings) 
-                  }); 
-                  if (response.ok) {
-                    setToast({ message: 'SMTP instellingen opgeslagen!', type: 'success' });
-                  } else {
-                    setToast({ message: 'Er ging iets mis bij het opslaan', type: 'error' });
-                  }
-                } catch (error) {
-                  setToast({ message: 'Er ging iets mis bij het opslaan', type: 'error' });
-                }
-              }}
+              onClick={() => saveSettings({
+                SMTP_HOST: settings.SMTP_HOST,
+                SMTP_PORT: settings.SMTP_PORT,
+                SMTP_SECURE: settings.SMTP_SECURE,
+                SMTP_USER: settings.SMTP_USER,
+                SMTP_PASS: settings.SMTP_PASS,
+                SMTP_FROM: settings.SMTP_FROM,
+                SMTP_TEST_TO: testTo
+              }, 'SMTP instellingen')}
+              disabled={loading}
             >
-              SMTP opslaan
+              {loading ? 'Opslaan...' : 'SMTP opslaan'}
             </Button>
           </div>
         </CardBody>
@@ -284,29 +334,21 @@ export default function Settings(){
           <div className="flex justify-end mt-6">
             <Button 
               variant="primary" 
-              onClick={async () => { 
-                try {
-                  const response = await fetch(`${API}/settings`, { 
-                    method: 'POST', 
-                    headers: tokenHeader, 
-                    body: JSON.stringify({ EMAIL_TEMPLATE_LICENSE: template }) 
-                  }); 
-                  if (response.ok) {
-                    load(); 
-                    setToast({ message: 'Email template opgeslagen!', type: 'success' });
-                  } else {
-                    setToast({ message: 'Er ging iets mis bij het opslaan', type: 'error' });
-                  }
-                } catch (error) {
-                  setToast({ message: 'Er ging iets mis bij het opslaan', type: 'error' });
-                }
-              }}
+              onClick={() => saveSettings({ EMAIL_TEMPLATE_LICENSE: template }, 'Email template')}
+              disabled={loading}
             >
-              Template opslaan
+              {loading ? 'Opslaan...' : 'Template opslaan'}
             </Button>
           </div>
         </CardBody>
       </Card>
+
+      <ErrorLogModal
+        isOpen={errorModal.isOpen}
+        onClose={() => setErrorModal({ isOpen: false, error: null })}
+        error={errorModal.error}
+        title="SMTP Test Error"
+      />
 
       {/* Toast notifications */}
       {toast && (

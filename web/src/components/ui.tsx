@@ -1,12 +1,12 @@
-import { ReactNode, forwardRef } from 'react';
+import React, { ReactNode, forwardRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MoonIcon, SunIcon, ChartBarIcon, CreditCardIcon, UserGroupIcon, DocumentTextIcon, CogIcon, KeyIcon } from '@heroicons/react/24/outline';
+import { MoonIcon, SunIcon, ChartBarIcon, CreditCardIcon, UserGroupIcon, DocumentTextIcon, CogIcon, KeyIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 export function AppShell({ topbar, children }: { topbar: ReactNode; children: ReactNode }){
   return (
     <div className="min-h-screen text-zinc-900 dark:text-zinc-100">
       {topbar}
-      <main className="p-6 max-w-7xl mx-auto">{children}</main>
+      <main className="p-6 max-w-[1600px] mx-auto">{children}</main>
     </div>
   );
 }
@@ -14,7 +14,7 @@ export function AppShell({ topbar, children }: { topbar: ReactNode; children: Re
 export function Navbar({ title, nav, actions }: { title: ReactNode; nav?: ReactNode; actions?: ReactNode }){
   return (
     <div className="sticky top-0 z-50 glass-card mb-1">
-      <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
+      <div className="max-w-[1600px] mx-auto flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-8">
           <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             {title}
@@ -119,8 +119,8 @@ export function ThemeToggle({ theme, onToggle }: { theme: 'light'|'dark'; onTogg
 
 export function Table({ children }: { children: ReactNode }){
   return (
-    <div className="glass-card overflow-hidden">
-      <table className="table-modern">{children}</table>
+    <div className="glass-card overflow-x-auto overflow-y-hidden">
+      <table className="table-modern min-w-[1100px]">{children}</table>
     </div>
   );
 }
@@ -138,7 +138,12 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
 }
 
 // Toast component for feedback
-export function Toast({ message, type = 'success', onClose }: { message: string; type?: 'success' | 'error'; onClose: () => void }) {
+export function Toast({ message, type = 'success', onClose, duration = 5000 }: { message: string; type?: 'success' | 'error'; onClose: () => void; duration?: number }) {
+  useEffect(() => {
+    const id = setTimeout(onClose, duration);
+    return () => clearTimeout(id);
+  }, [onClose, duration]);
+
   return (
     <div className={`fixed top-4 right-4 z-50 p-4 rounded-xl shadow-lg backdrop-blur-sm border ${
       type === 'success' 
@@ -147,7 +152,7 @@ export function Toast({ message, type = 'success', onClose }: { message: string;
     }`}>
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">{message}</span>
-        <button onClick={onClose} className="ml-2 hover:opacity-70">
+        <button onClick={onClose} className="ml-2 hover:opacity-70" aria-label="Close">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -197,6 +202,129 @@ export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; o
           {children}
         </CardBody>
       </Card>
+    </div>
+  );
+}
+
+export function DeleteConfirmationModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  title = "Bevestig verwijdering", 
+  message = "Weet u zeker dat u dit item wilt verwijderen?",
+  confirmText = "Verwijderen",
+  cancelText = "Annuleren"
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onConfirm: () => void; 
+  title?: string;
+  message?: string;
+  confirmText?: string;
+  cancelText?: string;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-md max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <Card className="h-full">
+          <CardBody className="overflow-y-auto max-h-[calc(90vh-2rem)]">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 dark:bg-red-950/50 rounded-lg">
+                <TrashIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+            </div>
+            
+            <p className="text-zinc-600 dark:text-zinc-400 mb-6">{message}</p>
+            
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={onClose}>
+                {cancelText}
+              </Button>
+              <Button variant="danger" onClick={() => { onConfirm(); onClose(); }}>
+                {confirmText}
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+export function ErrorLogModal({ 
+  isOpen, 
+  onClose, 
+  error, 
+  title = "Error Details"
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  error: any;
+  title?: string;
+}) {
+  if (!isOpen) return null;
+
+  const formatErrorDetails = (details: any) => {
+    if (!details) return 'Geen details beschikbaar';
+    
+    return Object.entries(details)
+      .filter(([_, value]) => value !== null && value !== undefined)
+      .map(([key, value]) => {
+        if (typeof value === 'object') {
+          return `${key}:\n${JSON.stringify(value, null, 2)}`;
+        }
+        return `${key}: ${value}`;
+      })
+      .join('\n\n');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <Card className="h-full">
+          <div className="flex items-center gap-3 p-6 border-b border-zinc-200 dark:border-zinc-700">
+            <div className="p-2 bg-red-100 dark:bg-red-950/50 rounded-lg">
+              <svg className="h-5 w-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+          </div>
+          
+          <CardBody className="overflow-y-auto max-h-[calc(90vh-140px)]">
+            <div className="space-y-4">
+              {error.message && (
+                <div>
+                  <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">Error Message:</h4>
+                  <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                    <p className="text-red-700 dark:text-red-300 text-sm">{error.message}</p>
+                  </div>
+                </div>
+              )}
+              
+              {error.details && (
+                <div>
+                  <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">Error Details:</h4>
+                  <div className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3">
+                    <pre className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap overflow-x-auto">
+                      {formatErrorDetails(error.details)}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardBody>
+          
+          <div className="flex justify-end p-6 border-t border-zinc-200 dark:border-zinc-700">
+            <Button variant="secondary" onClick={onClose}>
+              Sluiten
+            </Button>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -18,9 +18,58 @@ router.post('/', requireAuth, requireRole(['SUPER_ADMIN']), async (req, res) => 
 
 router.post('/test-email', requireAuth, requireRole(['SUPER_ADMIN']), async (req, res) => {
 	const { to } = req.body ?? {};
-	await sendMail({ to, subject: 'Test email', html: '<p>Test</p>' });
-	await setSetting('SMTP_TEST_TO', to);
-	res.json({ ok: true });
+	
+	try {
+		// Get current SMTP settings for logging
+		const host = await getSetting('SMTP_HOST');
+		const port = await getSetting('SMTP_PORT');
+		const secure = await getSetting('SMTP_SECURE');
+		const user = await getSetting('SMTP_USER');
+		const from = await getSetting('SMTP_FROM');
+		
+		// Test connection and send email
+		await sendMail({ to, subject: 'Test email', html: '<p>Test</p>' });
+		await setSetting('SMTP_TEST_TO', to);
+		
+		res.json({ 
+			ok: true, 
+			message: 'Test e-mail succesvol verstuurd!',
+			details: {
+				host,
+				port,
+				secure,
+				user,
+				from,
+				to
+			}
+		});
+	} catch (error: any) {
+		console.error('SMTP Test Error:', error);
+		
+		// Get detailed error information
+		const errorDetails = {
+			message: error.message || 'Onbekende fout',
+			code: error.code || 'UNKNOWN',
+			response: error.response || null,
+			command: error.command || null,
+			responseCode: error.responseCode || null,
+			stack: error.stack || null,
+			smtpSettings: {
+				host: await getSetting('SMTP_HOST'),
+				port: await getSetting('SMTP_PORT'),
+				secure: await getSetting('SMTP_SECURE'),
+				user: await getSetting('SMTP_USER'),
+				from: await getSetting('SMTP_FROM'),
+				to
+			}
+		};
+		
+		res.status(500).json({ 
+			ok: false, 
+			error: 'SMTP Test mislukt',
+			details: errorDetails
+		});
+	}
 });
 
 export default router;

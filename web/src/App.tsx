@@ -17,9 +17,30 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as any) || 'light');
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [appName, setAppName] = useState<string>('License Server');
   const { lang, setLang, t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Load app name from settings
+  useEffect(() => {
+    const loadAppName = async () => {
+      if (token) {
+        try {
+          const res = await fetch(`${API}/settings`, { 
+            headers: { Authorization: `Bearer ${token}` } 
+          });
+          const settings = await res.json();
+          const name = settings.APP_NAME || 'License Server';
+          setAppName(name);
+          document.title = name;
+        } catch (error) {
+          console.error('Failed to load app name:', error);
+        }
+      }
+    };
+    loadAppName();
+  }, [token]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -42,7 +63,7 @@ function App() {
 
   const topbar = useMemo(() => (
     <Navbar
-      title={t('app.name')}
+      title={appName}
       nav={isAuthed && (
         <>
           <NavLink to="/" icon={ChartBarIcon} active={location.pathname === '/'}>{t('nav.dashboard')}</NavLink>
@@ -58,7 +79,7 @@ function App() {
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
           <div className="relative">
             <select
-              className="form-input py-2 text-sm pr-8 appearance-none bg-white dark:bg-zinc-900"
+              className="form-input no-chevron py-2 text-sm pr-8 bg-white dark:bg-zinc-900"
               value={lang}
               onChange={(e) => setLang(e.target.value as any)}
             >
@@ -74,13 +95,13 @@ function App() {
         </>
       }
     />
-  ), [theme, lang, isAuthed, location.pathname]);
+  ), [theme, lang, isAuthed, location.pathname, appName]);
 
   return (
     <AppShell topbar={topbar}>
       <Routes>
-        <Route path="/login" element={<Login onLogin={(tkn) => { localStorage.setItem('token', tkn); setToken(tkn); }} />} />
-        <Route path="/setup" element={<Setup onSetup={(tkn) => { localStorage.setItem('token', tkn); setToken(tkn); }} />} />
+        <Route path="/login" element={<Login appName={appName} onLogin={(tkn) => { localStorage.setItem('token', tkn); setToken(tkn); }} />} />
+        <Route path="/setup" element={<Setup appName={appName} onSetup={(tkn) => { localStorage.setItem('token', tkn); setToken(tkn); }} />} />
         <Route path="/terms/:slug/:version" element={<TermsPublic />} />
         <Route path="/terms/latest" element={<TermsPublic latest />} />
 
@@ -88,7 +109,7 @@ function App() {
         <Route path="/licenses" element={isAuthed ? <Licenses /> : <Navigate to="/login" replace />} />
         <Route path="/license-types" element={isAuthed ? <LicenseTypes /> : <Navigate to="/login" replace />} />
         <Route path="/terms" element={isAuthed ? <Terms /> : <Navigate to="/login" replace />} />
-        <Route path="/settings" element={isAuthed ? <Settings /> : <Navigate to="/login" replace />} />
+        <Route path="/settings" element={isAuthed ? <Settings onSettingsChange={setAppName} /> : <Navigate to="/login" replace />} />
         <Route path="/users" element={isAuthed ? <Users /> : <Navigate to="/login" replace />} />
       </Routes>
     </AppShell>

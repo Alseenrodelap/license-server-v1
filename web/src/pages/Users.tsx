@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { PageHeader, Card, CardBody, Input, Select, Button, Table, FormField, Toast, Modal } from '../components/ui';
+import React, { useEffect, useState } from 'react';
+import { PageHeader, Card, CardBody, Input, Select, Button, Table, FormField, Toast, Modal, DeleteConfirmationModal } from '../components/ui';
 import { UserGroupIcon, PlusIcon, PencilIcon, KeyIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -10,6 +10,7 @@ export default function Users(){
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [editModal, setEditModal] = useState<{ isOpen: boolean; user?: any; type?: 'role' | 'password' }>({ isOpen: false });
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; user: any | null }>({ isOpen: false, user: null });
   const tokenHeader = { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' };
 
   const load = async () => {
@@ -19,17 +20,36 @@ export default function Users(){
   useEffect(()=>{ load(); },[]);
 
   const handleCreate = async () => {
+    // Validate form
+    if (!form.name || !form.email || !form.password) {
+      setToast({ message: 'Vul alle verplichte velden in', type: 'error' });
+      return;
+    }
+    
+    if (form.password.length < 6) {
+      setToast({ message: 'Wachtwoord moet minimaal 6 karakters zijn', type: 'error' });
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await fetch(`${API}/auth/users`,{ method:'POST', headers: tokenHeader, body: JSON.stringify(form) }); 
+      const response = await fetch(`${API}/auth/users`,{ 
+        method:'POST', 
+        headers: tokenHeader, 
+        body: JSON.stringify(form) 
+      }); 
+      
+      const data = await response.json();
+      
       if (response.ok) {
         setForm({ name:'', email:'', password:'', role:'READ_ONLY' }); 
         load();
         setToast({ message: 'Gebruiker succesvol aangemaakt!', type: 'success' });
       } else {
-        setToast({ message: 'Er ging iets mis bij het aanmaken', type: 'error' });
+        setToast({ message: data.error || 'Er ging iets mis bij het aanmaken', type: 'error' });
       }
     } catch (error) {
+      console.error('Error creating user:', error);
       setToast({ message: 'Er ging iets mis bij het aanmaken', type: 'error' });
     } finally {
       setLoading(false);
@@ -55,9 +75,11 @@ export default function Users(){
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
+  const handleDeleteUser = async () => {
+    if (!deleteModal.user) return;
+    
     try {
-      const response = await fetch(`${API}/auth/users/${userId}`, { 
+      const response = await fetch(`${API}/auth/users/${deleteModal.user.id}`, { 
         method:'DELETE', 
         headers: { Authorization: tokenHeader.Authorization } 
       });
@@ -203,11 +225,7 @@ export default function Users(){
                         variant="ghost" 
                         size="sm" 
                         icon={TrashIcon}
-                        onClick={() => { 
-                          if(confirm('Weet u zeker dat u deze gebruiker wilt verwijderen?')) {
-                            handleDeleteUser(u.id);
-                          }
-                        }}
+                        onClick={() => setDeleteModal({ isOpen: true, user: u })}
                       >
                         Verwijderen
                       </Button>
@@ -244,6 +262,16 @@ export default function Users(){
           />
         )}
       </Modal>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, user: null })}
+        onConfirm={handleDeleteUser}
+        title="Gebruiker verwijderen"
+        message={`Weet u zeker dat u de gebruiker "${deleteModal.user?.name}" (${deleteModal.user?.email}) wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.`}
+        confirmText="Verwijderen"
+        cancelText="Annuleren"
+      />
 
       {/* Toast notifications */}
       {toast && (

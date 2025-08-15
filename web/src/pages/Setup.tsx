@@ -4,7 +4,7 @@ import { Card, CardBody, Input, Button, FormField } from '../components/ui';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-export default function Setup({ onSetup }: { onSetup: (token: string) => void }){
+export default function Setup({ appName, onSetup }: { appName: string; onSetup: (token: string) => void }){
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,7 +45,7 @@ export default function Setup({ onSetup }: { onSetup: (token: string) => void })
       <Card className="w-full max-w-md">
         <CardBody className="space-y-6">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Setup License Server</h1>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Setup {appName}</h1>
             <p className="text-zinc-600 dark:text-zinc-400 mt-2">Maak uw eerste super-admin account aan</p>
           </div>
           
