@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../utils/jwt';
 
 export type AppRole = 'SUPER_ADMIN' | 'SUB_ADMIN' | 'READ_ONLY';
 
@@ -17,14 +18,14 @@ declare global {
 	}
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'change_me';
+
 
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
 	const authHeader = req.headers.authorization;
 	if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
 	const token = authHeader.slice(7);
 	try {
-		const payload = jwt.verify(token, JWT_SECRET) as AuthUser;
+		const payload = jwt.verify(token, getJwtSecret()) as AuthUser;
 		req.user = payload;
 		next();
 	} catch {

@@ -89,7 +89,7 @@ export default function LicenseTypes(){
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Nieuw licentie type</h2>
           </div>
           
-          <div className="flex gap-4 items-end">
+          <div className="flex flex-col gap-2">
             <FormField label="Type naam" className="flex-1">
               <Input 
                 value={name} 
@@ -98,14 +98,20 @@ export default function LicenseTypes(){
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
             </FormField>
-            <Button 
-              variant="primary" 
-              icon={PlusIcon}
-              onClick={handleCreate}
-              disabled={loading || !name.trim()}
-            >
-              {loading ? 'Toevoegen...' : 'Toevoegen'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="primary" 
+                icon={PlusIcon}
+                onClick={handleCreate}
+                disabled={loading || !name.trim()}
+                title={!name.trim() ? 'Vul eerst typenaam in' : undefined}
+              >
+                {loading ? 'Toevoegen...' : 'Toevoegen'}
+              </Button>
+              {!name.trim() && (
+                <span className="text-xs text-zinc-500">Vul eerst typenaam in</span>
+              )}
+            </div>
           </div>
         </CardBody>
       </Card>

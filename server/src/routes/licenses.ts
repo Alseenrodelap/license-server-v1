@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { generateLicenseCode } from '../utils/license';
+import { 
+	generateLicenseCode, 
+	generateCryptographicLicenseCode, 
+	verifyCryptographicLicenseCode,
+	generateVerificationToken,
+	isLicenseCodeCryptographic
+} from '../utils/license';
 import { getSetting, sendMail } from '../services/emailService';
 import logger from '../utils/logger';
 
@@ -64,11 +70,29 @@ router.post('/', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (
 		priceInterval = 'ONE_TIME',
 		expiresAt,
 		sendEmail = false,
+		// Nieuwe opties
+		isCryptographic = false,
+		requiresEmailVerification = false,
 	} = req.body ?? {};
+
+	let generatedCode: string;
+	let isCryptographicGenerated = false;
+
+	if (code) {
+		generatedCode = code;
+	} else if (isCryptographic) {
+		// Cryptografische sleutel genereren
+		const now = new Date();
+		generatedCode = generateCryptographicLicenseCode(customerEmail, now);
+		isCryptographicGenerated = true;
+	} else {
+		// Random sleutel genereren
+		generatedCode = generateLicenseCode();
+	}
 
 	const license = await prisma.license.create({
 		data: {
-			code: code || generateLicenseCode(),
+			code: generatedCode,
 			customerName,
 			customerEmail,
 			customerNumber,
@@ -79,6 +103,8 @@ router.post('/', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (
 			priceCents,
 			priceInterval,
 			expiresAt: expiresAt ? new Date(expiresAt) : null,
+			isCryptographic: isCryptographicGenerated,
+			requiresEmailVerification,
 		},
 		include: { type: true },
 	});
@@ -114,34 +140,402 @@ router.post('/', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (
 	res.json({ license });
 });
 
-router.put('/:id', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (req, res) => {
-	try {
-		const { id } = req.params;
-		const body = req.body ?? {};
-		// Map en filter alleen toegestane velden
-		const allowed: any = {};
-		if (typeof body.code === 'string' && body.code.trim()) allowed.code = body.code.trim();
-		if (typeof body.customerName === 'string') allowed.customerName = body.customerName;
-		if (typeof body.customerEmail === 'string') allowed.customerEmail = body.customerEmail;
-		if (typeof body.customerNumber === 'string') allowed.customerNumber = body.customerNumber;
-		if (typeof body.domain === 'string') allowed.domain = body.domain;
-		if (typeof body.status === 'string') allowed.status = body.status;
-		if (typeof body.notes === 'string' || body.notes === null) allowed.notes = body.notes;
-		if (typeof body.priceCents === 'number') allowed.priceCents = body.priceCents;
-		if (typeof body.priceInterval === 'string') allowed.priceInterval = body.priceInterval;
-		if (body.expiresAt === null) allowed.expiresAt = null;
-		if (typeof body.expiresAt === 'string') allowed.expiresAt = new Date(body.expiresAt);
-		const mappedTypeId = body.licenseTypeId || body.typeId;
-		if (typeof mappedTypeId === 'string') allowed.typeId = mappedTypeId;
+// Nieuwe endpoint voor licentie verificatie met e-mail verificatie
+router.post('/verify', async (req, res) => {
+	const { licenseCode, customerEmail } = req.body ?? {};
 
-		const license = await prisma.license.update({ where: { id }, data: allowed });
-		res.json({ license });
-	} catch (e: any) {
-		if (e?.code === 'P2002' && e?.meta?.target?.includes('License_code_key')) {
-			return res.status(409).json({ error: 'Licentiecode bestaat al' });
+	if (!licenseCode) {
+		return res.status(400).json({ error: 'License code required' });
+	}
+
+	// Rate limiting: 10 seconden tussen verzoeken per IP
+	const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+	const rateLimitKey = `license_verify_${clientIP}`;
+	
+	// Check rate limiting (simpele in-memory implementatie)
+	// In productie zou je Redis of een database gebruiken
+	const now = Date.now();
+	const lastRequest = global.rateLimitStore?.[rateLimitKey] || 0;
+	const timeSinceLastRequest = now - lastRequest;
+	
+	if (timeSinceLastRequest < 10000) { // 10 seconden
+		return res.status(429).json({ 
+			error: 'Rate limit exceeded. Please wait 10 seconds between requests.' 
+		});
+	}
+	
+	// Update last request time
+	if (!global.rateLimitStore) global.rateLimitStore = {};
+	global.rateLimitStore[rateLimitKey] = now;
+
+	try {
+		// Zoek licentie in database
+		const license = await prisma.license.findUnique({
+			where: { code: licenseCode },
+			include: { type: true }
+		});
+
+		if (!license) {
+			return res.json({ valid: false, reason: 'License not found' });
 		}
-		logger.error(`Update license failed: ${e?.message || e}`);
-		return res.status(500).json({ error: 'Failed to update license' });
+
+		// Check of licentie cryptografisch is en e-mail verificatie vereist
+		if (license.isCryptographic) {
+			if (!customerEmail) {
+				return res.status(400).json({ error: 'Customer email required for cryptographic license' });
+			}
+
+			// Verificeer cryptografische sleutel
+			const isCryptographicValid = verifyCryptographicLicenseCode(
+				licenseCode, 
+				customerEmail, 
+				license.createdAt
+			);
+
+			if (!isCryptographicValid) {
+				return res.json({ 
+					valid: false, 
+					reason: 'Invalid license code for this email address' 
+				});
+			}
+
+			// Check of e-mail overeenkomt
+			if (license.customerEmail.toLowerCase() !== customerEmail.toLowerCase()) {
+				return res.json({ 
+					valid: false, 
+					reason: 'License code does not match this email address' 
+				});
+			}
+		}
+
+		// Check e-mail verificatie status
+		if (license.requiresEmailVerification && !license.emailVerifiedAt) {
+			// Rate limiting: check of er recent al een verificatie e-mail is verzonden
+			const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+			if (license.verificationExpiresAt && license.verificationExpiresAt > fiveMinutesAgo) {
+				return res.json({ 
+					valid: false, 
+					reason: 'Email verification required',
+					requiresVerification: true,
+					licenseId: license.id,
+					message: 'Verification email already sent. Please check your inbox or wait 5 minutes before requesting a new one.'
+				});
+			}
+
+			// Genereer nieuwe verificatie token (5 minuten geldig)
+			const verificationToken = generateVerificationToken();
+			const verificationExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minuten
+
+			await prisma.license.update({
+				where: { id: license.id },
+				data: {
+					verificationToken,
+					verificationExpiresAt
+				}
+			});
+
+			// Verstuur verificatie e-mail
+			try {
+				const appName = (await getSetting('APP_NAME')) || 'License Server';
+				const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-license/${verificationToken}`;
+				
+				const template = (await getSetting('EMAIL_TEMPLATE_VERIFICATION')) ||
+					`<p>Beste {{customer_name}},</p>
+<p>Er is een verzoek gedaan om uw licentie te verifiëren.</p>
+<p><b>Code:</b> {{license_code}}<br/>
+<b>Type:</b> {{license_type}}<br/>
+<b>Domein:</b> {{domain}}</p>
+<p>Klik op de onderstaande link om uw licentie te verifiëren:</p>
+<p><a href="{{verification_url}}">Verificeer Licentie</a></p>
+<p>Deze link is 5 minuten geldig.</p>
+<p>Groet,<br/>${appName}</p>`;
+
+				const html = template
+					.replaceAll('{{customer_name}}', license.customerName)
+					.replaceAll('{{license_code}}', license.code)
+					.replaceAll('{{license_type}}', license.type.name)
+					.replaceAll('{{domain}}', license.domain)
+					.replaceAll('{{verification_url}}', verificationUrl);
+
+				await sendMail({ 
+					to: license.customerEmail, 
+					subject: `Verificeer uw licentie - ${appName}`, 
+					html 
+				});
+
+				logger.info(`Verification email sent to ${license.customerEmail} for license ${license.code}`);
+			} catch (error) {
+				logger.error(`Failed to send verification email: ${error}`);
+			}
+
+			return res.json({ 
+				valid: false, 
+				reason: 'Email verification required',
+				requiresVerification: true,
+				licenseId: license.id,
+				message: 'Verification email sent'
+			});
+		}
+
+		// Als e-mail verificatie niet vereist is OF al geverifieerd is, toon licentie informatie
+		// Check licentie status
+		if (license.status !== 'ACTIVE') {
+			return res.json({ 
+				valid: false, 
+				reason: `License is ${license.status.toLowerCase()}` 
+			});
+		}
+
+		// Check vervaldatum
+		if (license.expiresAt && license.expiresAt < new Date()) {
+			return res.json({ 
+				valid: false, 
+				reason: 'License has expired' 
+			});
+		}
+
+		// Update laatste API toegang
+		await prisma.license.update({
+			where: { id: license.id },
+			data: { lastApiAccessAt: new Date() }
+		});
+
+		return res.json({
+			valid: true,
+			license: {
+				id: license.id,
+				code: license.code,
+				customerName: license.customerName,
+				customerEmail: license.customerEmail,
+				domain: license.domain,
+				type: license.type.name,
+				status: license.status,
+				expiresAt: license.expiresAt,
+				isCryptographic: license.isCryptographic,
+				requiresEmailVerification: license.requiresEmailVerification,
+				emailVerifiedAt: license.emailVerifiedAt
+			}
+		});
+
+	} catch (error) {
+		logger.error(`License verification error: ${error}`);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// E-mail verificatie endpoint
+router.post('/verify-email/:token', async (req, res) => {
+	const { token } = req.params;
+
+	try {
+		const license = await prisma.license.findFirst({
+			where: { 
+				verificationToken: token,
+				verificationExpiresAt: { gt: new Date() }
+			},
+			include: { type: true }
+		});
+
+		if (!license) {
+			return res.status(400).json({ error: 'Invalid or expired verification token' });
+		}
+
+		// Markeer e-mail als geverifieerd (verander de licentie status NIET)
+		await prisma.license.update({
+			where: { id: license.id },
+			data: {
+				emailVerifiedAt: new Date(),
+				verificationToken: null,
+				verificationExpiresAt: null
+			}
+		});
+
+		return res.json({
+			success: true,
+			message: 'Email verified successfully. You can now verify your license.',
+			license: {
+				id: license.id,
+				code: license.code,
+				customerName: license.customerName,
+				customerEmail: license.customerEmail,
+				domain: license.domain,
+				type: license.type.name,
+				status: license.status,
+				expiresAt: license.expiresAt
+			}
+		});
+
+	} catch (error) {
+		logger.error(`Email verification error: ${error}`);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// Resend verification email
+router.post('/resend-verification/:id', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (req, res) => {
+	const { id } = req.params;
+
+	try {
+		const license = await prisma.license.findUnique({
+			where: { id },
+			include: { type: true }
+		});
+
+		if (!license) {
+			return res.status(404).json({ error: 'License not found' });
+		}
+
+		if (!license.requiresEmailVerification) {
+			return res.status(400).json({ error: 'License does not require email verification' });
+		}
+
+		if (license.emailVerifiedAt) {
+			return res.status(400).json({ error: 'Email already verified' });
+		}
+
+		// Rate limiting: check of er recent al een verificatie e-mail is verzonden
+		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+		if (license.verificationExpiresAt && license.verificationExpiresAt > fiveMinutesAgo) {
+			return res.status(429).json({ 
+				error: 'Please wait 5 minutes before requesting a new verification email' 
+			});
+		}
+
+		// Genereer nieuwe verificatie token (5 minuten geldig)
+		const verificationToken = generateVerificationToken();
+		const verificationExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minuten
+
+		await prisma.license.update({
+			where: { id },
+			data: {
+				verificationToken,
+				verificationExpiresAt
+			}
+		});
+
+		// Verstuur verificatie e-mail
+		const appName = (await getSetting('APP_NAME')) || 'License Server';
+		const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-license/${verificationToken}`;
+		
+		const template = (await getSetting('EMAIL_TEMPLATE_VERIFICATION')) ||
+			`<p>Beste {{customer_name}},</p>
+<p>Er is een verzoek gedaan om uw licentie te verifiëren.</p>
+<p><b>Code:</b> {{license_code}}<br/>
+<b>Type:</b> {{license_type}}<br/>
+<b>Domein:</b> {{domain}}</p>
+<p>Klik op de onderstaande link om uw licentie te verifiëren:</p>
+<p><a href="{{verification_url}}">Verificeer Licentie</a></p>
+<p>Deze link is 5 minuten geldig.</p>
+<p>Groet,<br/>${appName}</p>`;
+
+		const html = template
+			.replaceAll('{{customer_name}}', license.customerName)
+			.replaceAll('{{license_code}}', license.code)
+			.replaceAll('{{license_type}}', license.type.name)
+			.replaceAll('{{domain}}', license.domain)
+			.replaceAll('{{verification_url}}', verificationUrl);
+
+		await sendMail({ 
+			to: license.customerEmail, 
+			subject: `Verificeer uw licentie - ${appName}`, 
+			html 
+		});
+
+		res.json({ success: true, message: 'Verification email sent' });
+
+	} catch (error) {
+		logger.error(`Resend verification error: ${error}`);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// Update licentie (inclusief nieuwe opties)
+router.put('/:id', requireAuth, requireRole(['SUPER_ADMIN', 'SUB_ADMIN']), async (req, res) => {
+	const { id } = req.params;
+	const {
+		customerName,
+		customerEmail,
+		customerNumber,
+		domain,
+		typeId,
+		status,
+		notes,
+		priceCents,
+		priceInterval,
+		expiresAt,
+		requiresEmailVerification,
+	} = req.body ?? {};
+
+	try {
+		const license = await prisma.license.findUnique({ where: { id } });
+		if (!license) {
+			return res.status(404).json({ error: 'License not found' });
+		}
+
+		const updateData: any = {
+			customerName,
+			customerEmail,
+			customerNumber,
+			domain,
+			typeId,
+			status,
+			notes,
+			priceCents,
+			priceInterval,
+			expiresAt: expiresAt ? new Date(expiresAt) : null,
+		};
+
+		// Als e-mail verificatie wordt ingeschakeld en nog niet geverifieerd
+		if (requiresEmailVerification && !license.emailVerifiedAt) {
+			updateData.requiresEmailVerification = true;
+			updateData.verificationToken = generateVerificationToken();
+			updateData.verificationExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minuten
+		}
+
+		const updatedLicense = await prisma.license.update({
+			where: { id },
+			data: updateData,
+			include: { type: true }
+		});
+
+		// Verstuur verificatie e-mail als deze wordt ingeschakeld
+		if (requiresEmailVerification && !license.emailVerifiedAt) {
+			try {
+				const appName = (await getSetting('APP_NAME')) || 'License Server';
+				const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-license/${updatedLicense.verificationToken}`;
+				
+				const template = (await getSetting('EMAIL_TEMPLATE_VERIFICATION')) ||
+					`<p>Beste {{customer_name}},</p>
+<p>Er is een verzoek gedaan om uw licentie te verifiëren.</p>
+<p><b>Code:</b> {{license_code}}<br/>
+<b>Type:</b> {{license_type}}<br/>
+<b>Domein:</b> {{domain}}</p>
+<p>Klik op de onderstaande link om uw licentie te verifiëren:</p>
+<p><a href="{{verification_url}}">Verificeer Licentie</a></p>
+<p>Deze link is 5 minuten geldig.</p>
+<p>Groet,<br/>${appName}</p>`;
+
+				const html = template
+					.replaceAll('{{customer_name}}', updatedLicense.customerName)
+					.replaceAll('{{license_code}}', updatedLicense.code)
+					.replaceAll('{{license_type}}', updatedLicense.type.name)
+					.replaceAll('{{domain}}', updatedLicense.domain)
+					.replaceAll('{{verification_url}}', verificationUrl);
+
+				await sendMail({ 
+					to: updatedLicense.customerEmail, 
+					subject: `Verificeer uw licentie - ${appName}`, 
+					html 
+				});
+			} catch (error) {
+				logger.error(`Failed to send verification email: ${error}`);
+			}
+		}
+
+		res.json(updatedLicense);
+	} catch (error) {
+		logger.error(`Update license error: ${error}`);
+		res.status(500).json({ error: 'Internal server error' });
 	}
 });
 

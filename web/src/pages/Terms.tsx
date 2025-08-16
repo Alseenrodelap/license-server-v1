@@ -153,7 +153,7 @@ export default function Terms(){
               </div>
               
               <FormField label="Inhoud (WYSIWYG Editor)">
-                <div className="border border-zinc-300 dark:border-zinc-700 rounded-xl overflow-hidden">
+                <div className="border border-zinc-300 dark:border-zinc-700 rounded-xl overflow-hidden max-w-full">
                   
                   {/* TipTap Toolbar */}
                   <div className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 p-2 flex flex-wrap gap-1">
@@ -218,7 +218,7 @@ export default function Terms(){
                   </div>
 
                   {/* TipTap Editor */}
-                  <div className="p-4 min-h-[300px] focus:bg-blue-50/20 dark:focus:bg-blue-950/20">
+                  <div className="p-4 min-h-[300px] focus:bg-blue-50/20 dark:focus:bg-blue-950/20 max-w-full overflow-x-auto">
                     <EditorContent editor={editor} />
                   </div>
                 </div>
@@ -260,7 +260,7 @@ export default function Terms(){
                   )}
                 </div>
             
-            <Table>
+            <Table containerClassName="max-w-full overflow-x-auto">
               <thead>
                 <tr>
                   <th>Titel</th>

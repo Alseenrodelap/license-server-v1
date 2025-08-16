@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Licenses from './pages/Licenses';
@@ -9,15 +9,21 @@ import Users from './pages/Users';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import TermsPublic from './pages/TermsPublic';
+import VerifyLicense from './pages/VerifyLicense';
+import TestLicense from './pages/TestLicense';
 import { useI18n } from './i18n';
-import { AppShell, Navbar, NavLink, ThemeToggle, ChartBarIcon, CreditCardIcon, UserGroupIcon, DocumentTextIcon, CogIcon, KeyIcon } from './components/ui';
+import { AppShell, Navbar, NavLink, ThemeToggle, ChartBarIcon, CreditCardIcon, UserGroupIcon, DocumentTextIcon, CogIcon, KeyIcon, Button } from './components/ui';
+import { BackendStatus } from './components/BackendStatus';
+import { BackendConnectionBanner } from './components/BackendConnectionBanner';
+import { ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000';
 
 function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as any) || 'light');
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
   const [appName, setAppName] = useState<string>('License Server');
+  const [isBackendConnected, setIsBackendConnected] = useState<boolean | null>(null);
   const { lang, setLang, t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
@@ -49,17 +55,57 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      if (!token) {
+      // Check if system is initialized
+      try {
+        const res = await fetch(`${API}/auth/initialized`);
+        const data = await res.json();
+        if (!data.initialized) {
+          // System not initialized, redirect to setup
+          navigate('/setup', { replace: true });
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to check if system is initialized:', error);
+        // If we can't check, assume not initialized and redirect to setup
+        navigate('/setup', { replace: true });
+        return;
+      }
+
+      // If we have a token, verify it's still valid
+      if (token) {
         try {
-          const res = await fetch(`${API}/auth/initialized`);
-          const data = await res.json();
-          if (!data.initialized) navigate('/setup', { replace: true });
-        } catch {}
+          const res = await fetch(`${API}/auth/verify`, { 
+            headers: { Authorization: `Bearer ${token}` } 
+          });
+          if (!res.ok) {
+            // Token is invalid, clear it and redirect to login
+            localStorage.removeItem('token');
+            setToken(null);
+            navigate('/login', { replace: true });
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to verify token:', error);
+          // If we can't verify, clear token and redirect to login
+          localStorage.removeItem('token');
+          setToken(null);
+          navigate('/login', { replace: true });
+          return;
+        }
+      } else {
+        // No token, redirect to login
+        navigate('/login', { replace: true });
       }
     })();
-  }, [token]);
+  }, [token, navigate]);
 
   const isAuthed = Boolean(token);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    navigate('/login', { replace: true });
+  };
 
   const topbar = useMemo(() => (
     <Navbar
@@ -92,27 +138,47 @@ function App() {
               </svg>
             </div>
           </div>
+          {isAuthed && (
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              icon={ArrowRightOnRectangleIcon}
+              onClick={handleLogout}
+              title="Uitloggen"
+            >
+              Uitloggen
+            </Button>
+          )}
         </>
       }
     />
-  ), [theme, lang, isAuthed, location.pathname, appName]);
+  ), [theme, lang, isAuthed, location.pathname, appName, handleLogout]);
 
   return (
-    <AppShell topbar={topbar}>
-      <Routes>
-        <Route path="/login" element={<Login appName={appName} onLogin={(tkn) => { localStorage.setItem('token', tkn); setToken(tkn); }} />} />
-        <Route path="/setup" element={<Setup appName={appName} onSetup={(tkn) => { localStorage.setItem('token', tkn); setToken(tkn); }} />} />
-        <Route path="/terms/:slug/:version" element={<TermsPublic />} />
-        <Route path="/terms/latest" element={<TermsPublic latest />} />
+    <>
+      <BackendStatus 
+        apiUrl={API} 
+        onConnectionChange={setIsBackendConnected}
+      />
+      <BackendConnectionBanner />
+      <AppShell topbar={topbar}>
+        <Routes>
+          <Route path="/login" element={<Login appName={appName} onLogin={(tkn) => { localStorage.setItem('token', tkn); setToken(tkn); navigate('/', { replace: true }); }} />} />
+          <Route path="/setup" element={<Setup appName={appName} onSetup={(tkn) => { localStorage.setItem('token', tkn); setToken(tkn); navigate('/', { replace: true }); }} />} />
+          <Route path="/terms/:slug/:version" element={<TermsPublic />} />
+          <Route path="/terms/latest" element={<TermsPublic latest />} />
+          <Route path="/verify-license" element={<VerifyLicense />} />
+          <Route path="/test-license" element={<TestLicense />} />
 
-        <Route path="/" element={isAuthed ? <Dashboard /> : <Navigate to="/login" replace />} />
-        <Route path="/licenses" element={isAuthed ? <Licenses /> : <Navigate to="/login" replace />} />
-        <Route path="/license-types" element={isAuthed ? <LicenseTypes /> : <Navigate to="/login" replace />} />
-        <Route path="/terms" element={isAuthed ? <Terms /> : <Navigate to="/login" replace />} />
-        <Route path="/settings" element={isAuthed ? <Settings onSettingsChange={setAppName} /> : <Navigate to="/login" replace />} />
-        <Route path="/users" element={isAuthed ? <Users /> : <Navigate to="/login" replace />} />
-      </Routes>
-    </AppShell>
+          <Route path="/" element={isAuthed ? <Dashboard /> : <Navigate to="/login" replace />} />
+          <Route path="/licenses" element={isAuthed ? <Licenses /> : <Navigate to="/login" replace />} />
+          <Route path="/license-types" element={isAuthed ? <LicenseTypes /> : <Navigate to="/login" replace />} />
+          <Route path="/terms" element={isAuthed ? <Terms /> : <Navigate to="/login" replace />} />
+          <Route path="/settings" element={isAuthed ? <Settings onSettingsChange={setAppName} /> : <Navigate to="/login" replace />} />
+          <Route path="/users" element={isAuthed ? <Users /> : <Navigate to="/login" replace />} />
+        </Routes>
+      </AppShell>
+    </>
   );
 }
 

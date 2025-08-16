@@ -1,6 +1,6 @@
-import React, { ReactNode, forwardRef, useEffect } from 'react';
+import React, { ReactNode, forwardRef, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MoonIcon, SunIcon, ChartBarIcon, CreditCardIcon, UserGroupIcon, DocumentTextIcon, CogIcon, KeyIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { MoonIcon, SunIcon, ChartBarIcon, CreditCardIcon, UserGroupIcon, DocumentTextIcon, CogIcon, KeyIcon, TrashIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 
 export function AppShell({ topbar, children }: { topbar: ReactNode; children: ReactNode }){
   return (
@@ -12,16 +12,32 @@ export function AppShell({ topbar, children }: { topbar: ReactNode; children: Re
 }
 
 export function Navbar({ title, nav, actions }: { title: ReactNode; nav?: ReactNode; actions?: ReactNode }){
+  const [open, setOpen] = useState(false);
   return (
     <div className="sticky top-0 z-50 glass-card mb-1">
-      <div className="max-w-[1600px] mx-auto flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-8">
-          <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            {title}
+      <div className="max-w-[1600px] mx-auto px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              {title}
+            </div>
+            {nav && <nav className="hidden xl:flex items-center gap-1">{nav}</nav>}
           </div>
-          {nav && <nav className="flex items-center gap-1">{nav}</nav>}
+          <div className="flex items-center gap-3">
+            <div className="hidden xl:flex items-center gap-3">{actions}</div>
+            {(nav || actions) && (
+              <button className="xl:hidden p-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={() => setOpen(!open)} aria-label="Menu">
+                {open ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">{actions}</div>
+        {open && (
+          <div className="xl:hidden mt-4">
+            {nav && <nav className="flex flex-col gap-1 mb-3">{nav}</nav>}
+            <div className="flex flex-col gap-2">{actions}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -42,8 +58,18 @@ export function Button({ children, variant='primary', size='md', icon: Icon, ...
     md: 'px-4 py-2.5 text-sm',
     lg: 'px-6 py-3 text-base'
   };
+  
+  const baseClasses = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+  
+  const variants = {
+    primary: 'bg-primary text-white hover:bg-primary/90 focus:ring-primary/50 shadow-sm',
+    secondary: 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 focus:ring-zinc-500/50',
+    danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500/50 shadow-sm',
+    ghost: 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 focus:ring-zinc-500/50'
+  };
+  
   return (
-    <button className={`btn btn-${variant} ${sizes[size]}`} {...props}>
+    <button className={`${baseClasses} ${variants[variant]} ${sizes[size]}`} {...props}>
       {Icon && <Icon className="h-4 w-4" />}
       {children}
     </button>
@@ -117,10 +143,10 @@ export function ThemeToggle({ theme, onToggle }: { theme: 'light'|'dark'; onTogg
   );
 }
 
-export function Table({ children }: { children: ReactNode }){
+export function Table({ children, className = '', containerClassName = '' }: { children: ReactNode; className?: string; containerClassName?: string }){
   return (
-    <div className="glass-card overflow-x-auto overflow-y-hidden">
-      <table className="table-modern min-w-[1100px]">{children}</table>
+    <div className={`glass-card overflow-x-auto overflow-y-hidden ${containerClassName}`}>
+      <table className={`table-modern min-w-full xl:min-w-[1100px] ${className}`}>{children}</table>
     </div>
   );
 }

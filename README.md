@@ -1,68 +1,92 @@
 # License Server v1
 
-Moderne licentie-server met admin UI, API met rate limiting, e-mail via SMTP, WYSIWYG licentievoorwaarden met versies, en rolgebaseerde toegang (Super Admin, Sub Admin, Read Only). Frontend (React + Vite + Tailwind) en backend (Node.js + TypeScript + Express + Prisma/SQLite).
+Een complete license management applicatie met backend API en frontend interface.
 
-## Snel starten
+## Quick Start
 
-1. Vereisten: Node 18+, npm, SQLite (meegeleverd via Prisma), macOS compatibel.
-2. Omgeving klaarzetten:
-
+### Eerste keer setup (nieuwe PC)
 ```bash
-cd server
-cp .env.example .env
-# Vul minimaal JWT_SECRET en (optioneel) SMTP waarden in
-npm i
-npx prisma generate
-npx prisma migrate dev --name init
-cd ../web
-npm i
+# 1. Clone de repository
+git clone <repository-url>
+cd license-server-v1
+
+# 2. Optie A: Gebruik het automatische setup script (aanbevolen)
+./start.sh
+
+# 2. Optie B: Handmatige setup
+npm run setup
 ```
 
-3. Starten:
-
+### Normale start (na setup)
 ```bash
-# Terminal 1: backend
-cd server
-npm run dev
+# Start beide servers (backend + frontend)
+npm start
+```
 
-# Terminal 2: frontend
-cd web
+### Snelle troubleshooting
+```bash
+# Als er problemen zijn, probeer dit:
+npm run setup:env  # Maakt .env bestand aan
+npm run setup      # Volledige setup opnieuw
+```
+
+## Server URLs
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:4000
+
+## Development
+
+### Individuele servers starten
+```bash
+# Alleen backend in development mode
+npm run dev:server
+
+# Alleen frontend in development mode  
+npm run dev:web
+
+# Beide in development mode
 npm run dev
 ```
 
-4. Bezoek de frontend op `http://localhost:5173`. Als er nog geen super-admin is, verschijnt de setup pagina.
+### Database setup
+```bash
+# Genereer Prisma client
+cd server && npx prisma generate
 
-## Belangrijke features
+# Run database migrations
+cd server && npx prisma migrate dev
+```
 
-- Licenties aanmaken/bewerken/verwijderen, zoek/sort/filter/pagineren.
-- Automatische licentiecode generator (formaat: `innodigi-XXXXXXXX-XXXXXXXX`).
-- Prijs: eenmalig/maandelijks/jaarlijks, met statistieken op dashboard.
-- API voor licentie verificatie met per-licentie rate limit (5x/uur).
-- Licentievoorwaarden (WYSIWYG) met publieke URL en versies, plus laatste wijzigingsdatum.
-- SMTP instellingen, testmail, en e-mailtemplate met placeholders (bijv. `{{license_code}}`).
-- Gebruikersbeheer met rollen: Super Admin, Sub Admin, Read Only.
-- Donkere/licht modus, i18n (NL/EN) met vlaggetjes.
+## Project Structuur
+```
+license-server-v1/
+├── server/          # Backend API (Node.js + Express + Prisma)
+├── web/            # Frontend (React + Vite + TypeScript)
+└── package.json    # Root scripts voor beide servers
+```
 
-## Omgeving (.env in `server/`)
+## Troubleshooting
 
-Zie `.env.example`:
-- JWT_SECRET
-- PORT (optioneel, standaard 4000)
-- DATABASE_URL (standaard SQLite)
-- SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM (optioneel; kan ook via UI opgeslagen worden)
-- FRONTEND_URL (voor wachtwoord reset link)
+### Backend start niet
+1. Controleer of je in de juiste directory bent: `cd server`
+2. Controleer of `.env` bestand bestaat: `ls -la .env`
+3. Als `.env` niet bestaat: `npm run setup:env` (vanuit root directory)
+4. Installeer dependencies: `npm install`
+5. Run database setup: `npx prisma generate && npx prisma migrate dev`
+6. Build de applicatie: `npm run build`
+7. Start de server: `npm start`
 
-## Prisma
+### Frontend start niet
+1. Controleer of je in de juiste directory bent: `cd web`
+2. Installeer dependencies: `npm install`
+3. Start de development server: `npm run dev`
 
-- SQLite database bestand: `server/prisma/dev.db`.
-- Migraties en client: `npx prisma migrate dev`, `npx prisma generate`.
+### Database problemen
+1. Controleer of `.env` bestand bestaat met `DATABASE_URL`
+2. Run migrations: `cd server && npx prisma migrate dev`
+3. Genereer Prisma client: `cd server && npx prisma generate`
 
-## Productie
-
-- Zet een sterke `JWT_SECRET` en configureer SMTP.
-- Overweeg Postgres i.p.v. SQLite. Pas `DATABASE_URL` aan en draai migraties opnieuw.
-- Serven van frontend via reverse proxy; backend draait op `PORT`.
-
-## Moneybird (toekomst)
-
-- Koppeling wordt later toegevoegd; architectuur houdt hier rekening mee via services.
+### Environment variables
+- Het systeem genereert automatisch een veilige `JWT_SECRET` bij eerste setup
+- Voor productie: voeg `JWT_SECRET` toe aan `.env` voor consistentie
+- Voor SMTP: vul de e-mail instellingen in
